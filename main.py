@@ -1,7 +1,7 @@
 from fastapi import FastAPI,Path, HTTPException,Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel,Field,computed_field
-from typing import Annotated,Literal
+from typing import Annotated,Literal,Optional
 import json
 app= FastAPI()
 
@@ -136,3 +136,95 @@ def create_patient(patient:Patient):
     save_data(data)
 
     return JSONResponse(status_code=201,content={'message':'Patient created successfully'})
+
+class PatientUpdate(BaseModel):
+    name: Annotated[
+        Optional[str],
+        Field(default=None)
+    ]
+
+    city: Annotated[
+        Optional[str],
+        Field(default=None)
+    ]
+
+    age: Annotated[
+        Optional[int],
+        Field(default=None)
+    ]
+
+    gender: Annotated[
+        Optional[Literal["male", "female", "other"]],
+        Field(default=None)
+    ]
+
+    height: Annotated[
+        Optional[float],
+        Field(default=None)
+    ]
+
+    weight: Annotated[
+        Optional[float],
+        Field(default=None)
+    ]
+
+    @computed_field
+    @property
+    def bmi(self) -> float:
+        if self.height is None or self.weight is None:
+            return None
+        return round(self.weight / (self.height ** 2), 2)
+
+    @computed_field
+    @property
+    def verdict(self) -> str:
+        if self.bmi is None:
+            return None
+        if self.bmi < 18.5:
+            return "UnderWeight"
+        elif self.bmi < 25:
+            return "Normal"
+        elif self.bmi < 30:
+            return "OverWeight"
+        else:
+            return "Obese"
+        
+
+
+@app.put('/edit/{patient_id}')
+def update_patient(patient_id:str, patient_update:PatientUpdate):
+    data  = load_data()
+
+    if patient_id not in data:
+        raise HTTPException(status_code=404, detail="Patient id is not correct")
+    
+    exisitng_patient_info=data[patient_id]
+    print(exisitng_patient_info )
+    updated_patient_info = patient_update.model_dump(exclude_unset=True) #exclude_unset 
+    for key,value in updated_patient_info.items():
+        exisitng_patient_info[key] = value
+
+    exisitng_patient_info['id'] = patient_id
+    patient_pydantic_object=Patient(**exisitng_patient_info)
+    exisitng_patient_info=patient_pydantic_object.model_dump(exclude='id')
+
+    # add this dic to data
+    data[patient_id] = exisitng_patient_info
+
+    save_data(data)
+
+
+    return JSONResponse(status_code=200,content={'message':'Patient updated'})
+
+
+@app.delete('/delete/{patient_id}')
+def delete_patient(patient_id:str):
+    data =load_data()
+
+    if patient_id not in data:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    del data[patient_id]
+    save_data(data)
+
+    return JSONResponse(status_code=200, content={'message':'patient deleted'})
